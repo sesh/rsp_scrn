@@ -7,5 +7,8 @@ different browser widths. Useful for testing your site's responsive breakpoints 
 ### Usage
 
 ```
-python rsp_scrn.py <domain>
+python rsp_scrn.py <domain> [--resize] [--sleep=<int>]
+
+   --resize       Shrink the final GIF to save on filesize
+   --sleep        Wait x seconds before taking the screenshot
 ```
