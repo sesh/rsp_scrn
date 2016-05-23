@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import re
+import sys
 import time
 from datetime import date
 from io import BytesIO
@@ -14,6 +15,14 @@ from PIL import Image
 from selenium import webdriver
 
 
+
+def get_iphone_browser():
+    dcap = dict(webdriver.DesiredCapabilities.PHANTOMJS)
+    dcap["phantomjs.page.settings.userAgent"] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 7_1_1 like Mac OS X) AppleWebKit/537.51.2 (KHTML, like Gecko) Version/7.0 Mobile/11D201 Safari/9537.53'  # noqa
+    browser = webdriver.PhantomJS(desired_capabilities=dcap)
+    return browser
+
+
 def valid_filename(value):
     value = value.strip().replace(' ', '_')
     return re.sub(r'(?u)[^-\w.]', '', value)
@@ -22,7 +31,11 @@ def valid_filename(value):
 def take_screenshot(url, width, height, max_size, sleep=0, resize=False):
     print('[{}x{}] URL: {}'.format(width, height, url))
 
-    browser = webdriver.PhantomJS()
+    if width < 450:
+        browser = get_iphone_browser()
+    else:
+        browser = webdriver.PhantomJS()
+
     browser.set_window_size(width, height)
     browser.get(url)
 
@@ -30,22 +43,25 @@ def take_screenshot(url, width, height, max_size, sleep=0, resize=False):
         print('Taking a nap, see you in {} seconds'.format(sleep))
         time.sleep(sleep)
 
-    screenshot = BytesIO(browser.get_screenshot_as_png())
+    screenshot_from_selenium = BytesIO(browser.get_screenshot_as_png())
     browser.quit()
 
-    white_bg_placeholder = Image.new('RGB', max_size, (222, 222, 222))
-    screenshot = Image.open(screenshot)
+    screenshot_canvas = Image.new('RGB', max_size, (222, 222, 222))
+    screenshot_no_bg = Image.open(screenshot_from_selenium)
+
+    screenshot = Image.new("RGB", screenshot_no_bg.size, (255, 255, 255))
+    screenshot.paste(screenshot_no_bg, mask=screenshot_no_bg.split()[3])
 
     # retina display + chrome ends up with screenshots that are too large, resize those
     if screenshot.width > width:
         screenshot = screenshot.resize((width, int(screenshot.height * (width / screenshot.width))))
 
-    white_bg_placeholder.paste(screenshot, (0, 0))
+    screenshot_canvas.paste(screenshot, (0, 0))
 
     if resize:
-        white_bg_placeholder = white_bg_placeholder.resize((960, 600))
+        screenshot_canvas = screenshot_canvas.resize((960, 600))
 
-    return numpy.asarray(white_bg_placeholder)
+    return numpy.asarray(screenshot_canvas)
 
 
 @click.command()
@@ -53,6 +69,9 @@ def take_screenshot(url, width, height, max_size, sleep=0, resize=False):
 @click.option('--sleep', default=0)
 @click.option('--resize', is_flag=True)
 def responsive_screenshot(url, sleep, resize):
+    if not url.startswith('http://') and not url.startswith('https://'):
+        sys.exit('URL must start with http:// or https://')
+
     filename = valid_filename(url.split('://')[-1])
     # note: PhantomJS always returns a screenshot that's the full height of the page
     # note: Chromium doesn't resize smaller than ~500x500
